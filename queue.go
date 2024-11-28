@@ -40,10 +40,10 @@ func (t *Queue) Close() {
 	if (t.ctx).Err() != nil {
 		return
 	}
-	t.q = []interface{}{}
 	t.cancel()
 	close(t.In)
 	close(t.Out)
+	t.q = []interface{}{}
 }
 
 func (t *Queue) Done() <-chan struct{} {
