@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 )
 
 // Queue is a simple FIFO queue
@@ -13,8 +12,8 @@ type Queue struct {
 	In     chan interface{}
 	Out    chan interface{}
 	mux    sync.Mutex
-	ctx    *context.Context
-	cancel *context.CancelFunc
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // Add adds an element to the queue
@@ -38,13 +37,17 @@ func (t *Queue) Pop() (interface{}, error) {
 
 // Close closes and empties the queue
 func (t *Queue) Close() {
-	if (*t.ctx).Err() != nil {
+	if (t.ctx).Err() != nil {
 		return
 	}
 	t.q = []interface{}{}
-	(*t.cancel)()
+	t.cancel()
 	close(t.In)
 	close(t.Out)
+}
+
+func (t *Queue) Done() <-chan struct{} {
+	return t.ctx.Done()
 }
 
 // Size returns the number of elements in the queue
@@ -54,18 +57,22 @@ func (t *Queue) Size() int {
 	return len(t.q)
 }
 
+func (t *Queue) IsClosed() bool {
+	return t.ctx.Err() != nil
+}
+
 // New creates a new queue
 func New(parentCtx context.Context) *Queue {
 	ctx, cancel := context.WithCancel(parentCtx)
 	in := make(chan interface{}, 20)
 	out := make(chan interface{})
-	queue := Queue{q: []interface{}{}, In: in, Out: out, ctx: &ctx, cancel: &cancel}
+	queue := Queue{q: []interface{}{}, In: in, Out: out, ctx: ctx, cancel: cancel}
 	go func() {
 		for {
 			select {
 			case i := <-in:
 				queue.Add(i)
-			case <-(*queue.ctx).Done():
+			case <-queue.ctx.Done():
 				return
 			}
 		}
@@ -73,9 +80,7 @@ func New(parentCtx context.Context) *Queue {
 	go func() {
 		for {
 			select {
-			case <-(*queue.ctx).Done():
-				return
-			case <-time.After(5 * time.Second):
+			case <-queue.ctx.Done():
 				return
 			default:
 				o, err := queue.Pop()
