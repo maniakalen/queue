@@ -8,12 +8,13 @@ import (
 
 // Queue is a simple FIFO queue
 type Queue struct {
-	q      []interface{}
-	In     chan interface{}
-	Out    chan interface{}
-	mux    sync.Mutex
-	ctx    context.Context
-	cancel context.CancelFunc
+	q       []interface{}
+	In      chan interface{}
+	Out     chan interface{}
+	mux     sync.Mutex
+	ctx     context.Context
+	cancel  context.CancelFunc
+	pending uint8
 }
 
 // Add adds an element to the queue
@@ -54,7 +55,7 @@ func (t *Queue) Done() <-chan struct{} {
 func (t *Queue) Size() int {
 	t.mux.Lock()
 	defer t.mux.Unlock()
-	return len(t.q)
+	return len(t.q) + len(t.Out) + int(t.pending)
 }
 
 func (t *Queue) IsClosed() bool {
@@ -65,7 +66,7 @@ func (t *Queue) IsClosed() bool {
 func New(parentCtx context.Context) *Queue {
 	ctx, cancel := context.WithCancel(parentCtx)
 	in := make(chan interface{}, 20)
-	out := make(chan interface{})
+	out := make(chan interface{}, 1)
 	queue := Queue{q: []interface{}{}, In: in, Out: out, ctx: ctx, cancel: cancel}
 	go func() {
 		for {
@@ -85,9 +86,11 @@ func New(parentCtx context.Context) *Queue {
 				return
 			default:
 				o, err := queue.Pop()
+				queue.pending = 1
 				if err == nil {
 					out <- o
 				}
+				queue.pending = 0
 			}
 		}
 	}()
