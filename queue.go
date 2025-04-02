@@ -42,9 +42,9 @@ func (t *Queue) Close() {
 		return
 	}
 	t.cancel()
+	t.q = []interface{}{}
 	close(t.In)
 	close(t.Out)
-	t.q = []interface{}{}
 }
 
 func (t *Queue) Done() <-chan struct{} {
